@@ -29,17 +29,20 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build release APK
+      # Build the debug variant because Android signs it automatically with
+      # the standard debug keystore. This makes the in-house Gateway APK
+      # directly installable on the Samsung A21s without a release key.
+      - name: Build signed installable Gateway APK
         working-directory: android
-        run: gradle --no-daemon assembleRelease
+        run: gradle --no-daemon assembleDebug
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/release/app-release-unsigned.apk GSMS_SMS_v1.0-unsigned.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk GSMS_SMS_v1.0-Gateway.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GSMS_SMS_v1.0-unsigned
-          path: GSMS_SMS_v1.0-unsigned.apk
+          name: GSMS_SMS_v1.0-Gateway
+          path: GSMS_SMS_v1.0-Gateway.apk
 
   windows:
     runs-on: windows-latest
