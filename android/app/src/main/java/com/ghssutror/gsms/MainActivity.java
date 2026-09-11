@@ -20,6 +20,11 @@ import java.util.List;
 
 public class MainActivity extends Activity {
     private static final int SMS_PERMISSION_REQUEST = 100;
+    private static final String[] REQUIRED_PERMISSIONS = new String[]{
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE
+    };
+
     private EditText recipients;
     private EditText message;
     private TextView status;
@@ -38,7 +43,7 @@ public class MainActivity extends Activity {
         send = findViewById(R.id.send);
         Button clear = findViewById(R.id.clear);
 
-        requestSmsPermission();
+        requestRequiredPermissions();
         updateCounter();
 
         message.addTextChangedListener(new TextWatcher() {
@@ -55,10 +60,24 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void requestSmsPermission() {
-        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.SEND_SMS}, SMS_PERMISSION_REQUEST);
+    private void requestRequiredPermissions() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            ArrayList<String> missing = new ArrayList<>();
+            for (String permission : REQUIRED_PERMISSIONS) {
+                if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(permission);
+                }
+            }
+            if (!missing.isEmpty()) {
+                requestPermissions(missing.toArray(new String[0]), SMS_PERMISSION_REQUEST);
+            }
         }
+    }
+
+    private boolean hasRequiredPermissions() {
+        if (Build.VERSION.SDK_INT < 23) return true;
+        return checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void updateCounter() {
@@ -67,9 +86,9 @@ public class MainActivity extends Activity {
     }
 
     private void sendSmsBatch() {
-        if (checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            requestSmsPermission();
-            status.setText("SMS permission is required.");
+        if (!hasRequiredPermissions()) {
+            requestRequiredPermissions();
+            status.setText("Allow SMS and Phone permissions so GSMS can detect SIM 1.");
             return;
         }
 
@@ -92,7 +111,7 @@ public class MainActivity extends Activity {
 
         SmsManager smsManager = getSim1SmsManager();
         if (smsManager == null) {
-            status.setText("SIM 1 was not detected. Please check the SIM card.");
+            status.setText("SIM 1 was not detected. Please check SIM 1 and Phone permission.");
             Toast.makeText(this, "SIM 1 not available", Toast.LENGTH_LONG).show();
             return;
         }
@@ -133,14 +152,19 @@ public class MainActivity extends Activity {
             SubscriptionManager sm = getSystemService(SubscriptionManager.class);
             if (sm == null) return null;
             List<SubscriptionInfo> list = sm.getActiveSubscriptionInfoList();
-            if (list == null) return null;
+            if (list == null || list.isEmpty()) return null;
+
             for (SubscriptionInfo info : list) {
-                if (info.getSimSlotIndex() == 0) {
+                if (info != null && info.getSimSlotIndex() == 0) {
                     return SmsManager.getSmsManagerForSubscriptionId(info.getSubscriptionId());
                 }
             }
             return null;
         } catch (SecurityException e) {
+            android.util.Log.e("GSMS", "Unable to read active SIM subscriptions", e);
+            return null;
+        } catch (Exception e) {
+            android.util.Log.e("GSMS", "SIM detection failed", e);
             return null;
         }
     }
@@ -149,10 +173,10 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == SMS_PERMISSION_REQUEST) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                status.setText("Ready — SMS will be sent through SIM 1.");
+            if (hasRequiredPermissions()) {
+                status.setText("SIM permissions granted. Ready — SMS will be sent through SIM 1.");
             } else {
-                status.setText("SMS permission denied. Allow SMS permission in Settings.");
+                status.setText("Please allow SMS and Phone permissions in Settings.");
             }
         }
     }
