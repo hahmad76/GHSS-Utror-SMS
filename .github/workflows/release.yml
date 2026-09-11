@@ -3,6 +3,8 @@ name: Build GSMS SMS v1.0
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v1.*'
 
@@ -29,10 +31,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      # Build the debug variant because Android signs it automatically with
-      # the standard debug keystore. This makes the in-house Gateway APK
-      # directly installable on the Samsung A21s without a release key.
-      - name: Build signed installable Gateway APK
+      - name: Build signed debug APK
         working-directory: android
         run: gradle --no-daemon assembleDebug
 
