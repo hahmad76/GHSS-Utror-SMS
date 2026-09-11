@@ -10,7 +10,6 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -106,9 +105,7 @@ public class MainActivity extends Activity {
                 if (parts.size() == 1) {
                     smsManager.sendTextMessage(number, null, text, null, null);
                 } else {
-                    ArrayList<android.app.PendingIntent> sentIntents = new ArrayList<>();
-                    for (int i = 0; i < parts.size(); i++) sentIntents.add(null);
-                    smsManager.sendMultipartTextMessage(number, null, parts, sentIntents, null);
+                    smsManager.sendMultipartTextMessage(number, null, parts, null, null);
                 }
                 sent++;
             } catch (Exception e) {
@@ -122,7 +119,7 @@ public class MainActivity extends Activity {
     }
 
     private List<String> parseRecipients(String raw) {
-        String[] items = raw.split("[\\s,;]+|");
+        String[] items = raw.split("[\\s,;]+");
         ArrayList<String> result = new ArrayList<>();
         for (String item : items) {
             String n = item.trim();
