@@ -1,4 +1,4 @@
-name: Build GSMS SMS v1.0
+name: Build GSMS SMS v1.0 Android
 
 on:
   workflow_dispatch:
@@ -31,37 +31,14 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build signed debug APK
+      - name: Build Android APK
         working-directory: android
         run: gradle --no-daemon assembleDebug
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk GSMS_SMS_v1.0-Gateway.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk GSMS_SMS_v1.0-ANDROID-ONLY.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GSMS_SMS_v1.0-Gateway
-          path: GSMS_SMS_v1.0-Gateway.apk
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        working-directory: windows
-        run: pip install -r requirements.txt pyinstaller
-
-      - name: Build EXE
-        working-directory: windows
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name GSMS_SMS_v1.0 main.py
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: GSMS_SMS_v1.0.exe
-          path: windows/dist/GSMS_SMS_v1.0.exe
+          name: GSMS_SMS_v1.0-ANDROID-ONLY
+          path: GSMS_SMS_v1.0-ANDROID-ONLY.apk
