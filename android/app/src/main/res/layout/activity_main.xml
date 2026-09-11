@@ -1,19 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:padding="20dp">
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="GSMS SMS v1.0\nGHSS Utror Swat" android:textSize="24sp" android:textStyle="bold"/>
-    <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="16dp" android:text="Server stopped" android:textSize="18sp"/>
-    <TextView android:id="@+id/address" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="12dp" android:text="PC gateway address" android:textIsSelectable="true"/>
-    <TextView android:id="@+id/token" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="8dp" android:text="Pairing token" android:textIsSelectable="true"/>
-    <Button android:id="@+id/start" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="16dp" android:text="Start SMS Gateway"/>
-    <Button android:id="@+id/stop" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="8dp" android:text="Stop SMS Gateway"/>
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="18dp" android:text="Keep this phone on the same Wi-Fi network as the PC. SMS is sent through SIM 1."/>
-</LinearLayout>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="GSMS SMS v1.0\nGHSS Utror Swat"
+            android:textSize="26sp" android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="ANDROID-ONLY EDITION — PC connectivity is reserved for Version 2."
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="Ready — SMS will be sent through SIM 1."
+            android:textSize="17sp" android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Student / Parent mobile number(s)"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/recipients"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="03XXXXXXXXX, 03XXXXXXXXX"
+            android:inputType="phone"
+            android:minLines="2" android:gravity="top" />
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="SMS message"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/message"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="Type your message here..."
+            android:inputType="textCapSentences|textMultiLine"
+            android:minLines="5" android:gravity="top" />
+
+        <TextView
+            android:id="@+id/counter"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:text="Message length: 0 characters" />
+
+        <Button
+            android:id="@+id/send"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="SEND SMS THROUGH SIM 1" />
+
+        <Button
+            android:id="@+id/clear"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="CLEAR" />
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Use commas, spaces, semicolons, or new lines between numbers. Keep SIM 1 active. SMS charges depend on your mobile package."
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>
