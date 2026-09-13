@@ -12,7 +12,7 @@ on:
 jobs:
   build-windows:
     name: Build Windows ${{ matrix.arch }}
-    runs-on: windows-latest
+    runs-on: windows-2019
     strategy:
       fail-fast: false
       matrix:
@@ -27,10 +27,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.8.10 (${{ matrix.python_arch }})
+      - name: Set up Python 3.7.9 (${{ matrix.python_arch }})
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8.10'
+          python-version: '3.7.9'
           architecture: ${{ matrix.python_arch }}
           cache: pip
           cache-dependency-path: windows/requirements.txt
@@ -41,7 +41,7 @@ jobs:
           python -m pip install -r windows/requirements.txt
           python -m pip install "pyinstaller==5.13.2"
 
-      - name: Build standalone executable
+      - name: Build standalone executable with Win7-compatible Python runtime
         working-directory: windows
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name GSMS_SMS_v1.0_Windows_7_10_11_${{ matrix.arch }} main.py
