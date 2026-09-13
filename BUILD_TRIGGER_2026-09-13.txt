@@ -1,0 +1,2 @@
+GSMS SMS v1.0 Windows production build trigger.
+Build target: Windows 7/8/8.1/10/11, 32-bit portable EXE.
