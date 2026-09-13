@@ -4,9 +4,9 @@ from tkinter import messagebox
 import main
 
 APP = main.APP
-DEFAULT_SCHOOL = main.DEFAULT_SCHOOL
-DEFAULT_SERVICE = main.DEFAULT_SERVICE
-DEFAULT_VERSION = main.DEFAULT_VERSION
+DEFAULT_SCHOOL = getattr(main, "SCHOOL", "Govt. Higher Secondary School Utror Swat")
+DEFAULT_SERVICE = "GSMS SMS SOFTWARE"
+DEFAULT_VERSION = "Version 1.0"
 
 _original_label = main.tk.Label
 
@@ -68,8 +68,7 @@ class ProductionApp(main.App):
     def _gateway_test_worker(self):
         ok, detail = self.gateway_test()
         def show():
-            self.status.set("Android gateway connected." if ok
-                            else "Android gateway not found.")
+            self.status.set("Android gateway connected." if ok else "Android gateway not found.")
             if ok:
                 messagebox.showinfo(main.APP, "Gateway Test PASSED\n\n" + detail)
             else:
@@ -115,10 +114,8 @@ class ProductionApp(main.App):
 
         buttons = tk.Frame(frame)
         buttons.grid(row=len(fields), column=1, sticky="e", pady=(12, 0))
-        tk.Button(buttons, text="Gateway Test",
-                  command=self.run_gateway_test).pack(side="left", padx=4)
-        tk.Button(buttons, text="Save & Apply",
-                  command=save).pack(side="left", padx=4)
+        tk.Button(buttons, text="Gateway Test", command=self.run_gateway_test).pack(side="left", padx=4)
+        tk.Button(buttons, text="Save & Apply", command=save).pack(side="left", padx=4)
 
 if __name__ == "__main__":
     root = tk.Tk()
