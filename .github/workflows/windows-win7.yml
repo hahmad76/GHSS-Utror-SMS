@@ -26,7 +26,7 @@ jobs:
 
       - name: Build Windows 7 compatible portable EXE
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name GSMS_SMS_v1.0_Windows_7_10_11_32_64 windows/main.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name GSMS_SMS_v1.0_Windows_7_10_11_32_64 windows/production.py
 
       - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
