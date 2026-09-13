@@ -6,9 +6,6 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 
 APP = "GSMS SMS v1.0"
 SCHOOL = "Govt. Higher Secondary School Utror Swat"
-# Use plain strings here instead of pathlib.Path objects. This keeps the
-# application compatible with older Python/Windows combinations, including
-# Windows 7, and avoids the WindowsPath TypeError seen in the previous build.
 APPDATA = os.getenv("APPDATA") or os.path.expanduser("~")
 DB = os.path.join(APPDATA, "GSMS_SMS_v1", "gsms.db")
 if not os.path.isdir(os.path.dirname(DB)):
@@ -42,10 +39,7 @@ class DBStore:
         return row[0] if row else None
     def set(self, k, v):
         with self.lock:
-            # INSERT OR REPLACE is intentionally used instead of SQLite UPSERT.
-            # Older SQLite versions bundled with Windows 7-compatible Python
-            # do not understand "ON CONFLICT ... DO UPDATE" and fail with
-            # "near ON: syntax error".
+            # Keep compatibility with the older SQLite version bundled with Python 3.6.
             self.db.execute("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, v))
             self.db.commit()
     def contacts(self):
@@ -92,3 +86,205 @@ class RateLimiter:
             return max(waits) if waits else 0
     def mark(self):
         with self.lock: self.times.append(time.time())
+
+class App:
+    def __init__(self, root):
+        self.root=root
+        self.store=DBStore()
+        self.limiter=RateLimiter()
+        self.pause=threading.Event(); self.pause.set()
+        self.q=queue.Queue()
+        self.checked=set()
+        root.title(APP + " - " + SCHOOL)
+        root.geometry("1120x720")
+        root.minsize(900,600)
+        self.build_login()
+
+    def clear(self):
+        for w in self.root.winfo_children(): w.destroy()
+
+    def build_login(self):
+        self.clear()
+        f=tk.Frame(self.root,padx=50,pady=40); f.pack(expand=True)
+        tk.Label(f,text=SCHOOL,font=("Segoe UI",20,"bold")).pack(pady=8)
+        tk.Label(f,text="GSMS SMS Software",font=("Segoe UI",18,"bold")).pack(pady=4)
+        tk.Label(f,text="Version 1.0",font=("Segoe UI",11,"italic")).pack(pady=4)
+        tk.Label(f,text="Principal Login",font=("Segoe UI",12)).pack(pady=(28,6))
+        pw=tk.Entry(f,show="*",width=28); pw.pack(); pw.focus()
+        tk.Button(f,text="Login",width=16,command=lambda:self.login(pw.get())).pack(pady=14)
+        tk.Label(f,text="Default first-login password: 1234",fg="#7a1f1f").pack()
+        pw.bind("<Return>",lambda e:self.login(pw.get()))
+
+    def login(self,p):
+        if p==self.store.get("password"): self.build_main()
+        else: messagebox.showerror(APP,"Incorrect password.")
+
+    def build_main(self):
+        self.clear()
+        self.checked=set()
+        self.root.geometry("1120x720")
+        tk.Label(self.root,text=SCHOOL,bg="#dce9c4",font=("Segoe UI",16,"bold"),pady=5).pack(fill="x")
+        tk.Label(self.root,text="GSMS SMS SOFTWARE",bg="#f9c08f",font=("Segoe UI",17,"bold"),pady=5).pack(fill="x")
+        tk.Label(self.root,text="Version 1.0",font=("Segoe UI",10,"italic")).pack(anchor="e",padx=14,pady=(2,4))
+        toolbar=tk.Frame(self.root); toolbar.pack(fill="x",padx=10,pady=2)
+        tk.Button(toolbar,text="Import Students",command=self.import_students).pack(side="left")
+        tk.Button(toolbar,text="Select All",command=self.select_all).pack(side="left",padx=4)
+        tk.Button(toolbar,text="Clear Checks",command=self.clear_checks).pack(side="left")
+        tk.Button(toolbar,text="Settings",command=self.settings).pack(side="right",padx=3)
+        tk.Button(toolbar,text="Backup",command=self.backup).pack(side="right",padx=3)
+        tk.Button(toolbar,text="Change Password",command=self.change_password).pack(side="right",padx=3)
+        table_frame=tk.Frame(self.root,bd=1,relief="solid"); table_frame.pack(fill="both",expand=True,padx=10,pady=5)
+        cols=("check","roll","name","father","class","section")
+        self.tree=ttk.Treeview(table_frame,columns=cols,show="headings",selectmode="browse")
+        headings={"check":"","roll":"Roll No","name":"Name","father":"Father Name","class":"Class","section":"Section"}
+        widths={"check":45,"roll":95,"name":220,"father":220,"class":100,"section":100}
+        for c in cols:
+            self.tree.heading(c,text=headings[c]); self.tree.column(c,width=widths[c],anchor="w")
+        self.tree.column("check",anchor="center")
+        y=ttk.Scrollbar(table_frame,orient="vertical",command=self.tree.yview); self.tree.configure(yscrollcommand=y.set)
+        self.tree.pack(side="left",fill="both",expand=True); y.pack(side="right",fill="y")
+        self.tree.bind("<Button-1>",self.toggle_check)
+        self.tree.bind("<Double-1>",self.edit_student)
+        self.refresh_students()
+        tk.Label(self.root,text="Message",font=("Segoe UI",10,"bold"),anchor="w").pack(fill="x",padx=12,pady=(4,0))
+        self.message=tk.Text(self.root,height=7,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")
+        self.message.pack(fill="x",padx=10,pady=(2,5))
+        bottom=tk.Frame(self.root); bottom.pack(fill="x",padx=10,pady=(0,10))
+        self.status=tk.StringVar(value="Ready — check the students who should receive the SMS.")
+        tk.Label(bottom,textvariable=self.status,anchor="w").pack(side="left",fill="x",expand=True)
+        tk.Button(bottom,text="SEND SMS",font=("Segoe UI",11,"bold"),width=16,command=self.send_checked).pack(side="right")
+        threading.Thread(target=self.worker,daemon=True).start()
+
+    def refresh_students(self):
+        for x in self.tree.get_children(): self.tree.delete(x)
+        self.checked=set()
+        for r in self.store.contacts():
+            rid,roll,name,father,cls,section,phone,group_name,kind=r
+            self.tree.insert("","end",iid=str(rid),values=("☐",roll or "",name or "",father or "",cls or "",section or ""))
+
+    def toggle_check(self,event):
+        item=self.tree.identify_row(event.y); col=self.tree.identify_column(event.x)
+        if not item or col!="#1": return
+        rid=int(item)
+        if rid in self.checked:
+            self.checked.remove(rid); mark="☐"
+        else:
+            self.checked.add(rid); mark="☑"
+        vals=list(self.tree.item(item,"values")); vals[0]=mark; self.tree.item(item,values=vals)
+
+    def select_all(self):
+        for item in self.tree.get_children():
+            rid=int(item); self.checked.add(rid); vals=list(self.tree.item(item,"values")); vals[0]="☑"; self.tree.item(item,values=vals)
+        self.status.set("All visible students checked.")
+    def clear_checks(self):
+        self.checked.clear()
+        for item in self.tree.get_children():
+            vals=list(self.tree.item(item,"values")); vals[0]="☐"; self.tree.item(item,values=vals)
+        self.status.set("Checks cleared.")
+
+    def student_data(self,rid):
+        for r in self.store.contacts():
+            if r[0]==rid:return r
+        return None
+
+    def edit_student(self,event=None):
+        item=self.tree.focus()
+        if not item:return
+        row=self.student_data(int(item))
+        if not row:return
+        w=tk.Toplevel(self.root);w.title("Edit Student");f=tk.Frame(w,padx=15,pady=15);f.pack()
+        vals=[row[1],row[2],row[3],row[4],row[5],row[6]]
+        labels=["Roll No","Name","Father Name","Class","Section","Mobile No"]
+        es=[]
+        for i,(lab,val) in enumerate(zip(labels,vals)):
+            tk.Label(f,text=lab,width=16,anchor="w").grid(row=i,column=0,pady=4)
+            e=tk.Entry(f,width=40);e.grid(row=i,column=1,pady=4);e.insert(0,str(val or ""));es.append(e)
+        def save():
+            self.store.update_contact(row[0],*[e.get().strip() for e in es]);w.destroy();self.refresh_students()
+        tk.Button(f,text="Save",command=save).grid(row=6,column=1,sticky="e",pady=8)
+
+    def import_students(self):
+        p=filedialog.askopenfilename(filetypes=[("Excel/CSV","*.xlsx *.xlsm *.csv"),("All files","*.*")])
+        if not p:return
+        try:
+            if p.lower().endswith(".csv"):
+                with open(p,newline="",encoding="utf-8-sig") as f: rows=list(csv.reader(f))
+            else:
+                from openpyxl import load_workbook
+                rows=[list(r) for r in load_workbook(p,read_only=True,data_only=True).active.iter_rows(values_only=True)]
+            if not rows: raise ValueError("No rows found")
+            h=[str(x or "").strip().lower() for x in rows[0]]
+            def idx(names,default):
+                for n in names:
+                    if n in h:return h.index(n)
+                return default
+            ri=idx(["roll no","roll number","admission no","admission number","s.no","sr no"],0)
+            ni=idx(["name","student name"],1)
+            fi=idx(["father name","father","guardian name"],2)
+            ci=idx(["class","class name"],3)
+            si=idx(["section","sec"],4)
+            pi=idx(["mobile","mobile no","phone","phone number","parent phone"],5)
+            count=0
+            for r in rows[1:]:
+                if len(r)<=max(ri,ni,pi):continue
+                vals=[str(r[i] or "").strip() if i<len(r) else "" for i in (ri,ni,fi,ci,si,pi)]
+                if vals[1] and vals[5]: self.store.add_contact(*vals);count+=1
+            self.refresh_students();messagebox.showinfo(APP,"Imported %d student(s)."%count)
+        except Exception as e: messagebox.showerror(APP,"Import failed: %s"%e)
+
+    def send_checked(self):
+        text=self.message.get("1.0","end").strip()
+        if not text:return messagebox.showwarning(APP,"Please enter the SMS message first.")
+        if not self.checked:return messagebox.showwarning(APP,"Please check at least one student.")
+        rows=[]; missing=[]
+        for rid in list(self.checked):
+            r=self.student_data(rid)
+            if r:
+                if r[6]: rows.append(r)
+                else: missing.append(r[2] or str(rid))
+        if not rows:return messagebox.showerror(APP,"None of the checked students has a mobile number.")
+        if missing and not messagebox.askyesno(APP,"%d checked student(s) have no mobile number and will be skipped. Continue?"%len(missing)):return
+        if not messagebox.askyesno(APP,"Send this SMS to %d checked student(s)?"%len(rows)):return
+        for r in rows:self.q.put((r[6],text,r[2] or "Student"))
+        self.status.set("Queued %d SMS(s) for sending."%len(rows))
+
+    def worker(self):
+        while True:
+            phone,msg,name=self.q.get()
+            try:
+                self.pause.wait()
+                while not self.limiter.can_send():
+                    wait=self.limiter.wait_seconds();self.status_set("Safety limit reached; waiting about %d minute(s)."%(int(wait//60)+1));time.sleep(min(max(wait,1),60));self.pause.wait()
+                ok,detail=self.send_android(phone,msg)
+                self.store.log(phone,msg,"accepted" if ok else "failed")
+                if ok:self.limiter.mark(); self.status_set("Accepted: %s (%s)"%(name,phone))
+                else:self.status_set("Failed: %s — %s"%(name,detail))
+            finally:self.q.task_done()
+
+    def status_set(self,t): self.root.after(0,lambda:self.status.set(t))
+    def send_android(self,phone,msg):
+        base=(self.store.get("android_url") or "").rstrip("/"); token=self.store.get("token") or ""
+        data=json.dumps({"phone":phone,"message":msg}).encode()
+        req=request.Request(base+"/send",data=data,method="POST",headers={"Content-Type":"application/json","X-GSMS-Token":token})
+        try:
+            with request.urlopen(req,timeout=12) as r:return r.status==200,r.read().decode(errors="replace")
+        except Exception as e:return False,str(e)
+
+    def settings(self):
+        w=tk.Toplevel(self.root);w.title("Gateway Settings");f=tk.Frame(w,padx=20,pady=20);f.pack()
+        tk.Label(f,text="Android URL").grid(row=0,column=0,sticky="w",pady=5);u=tk.Entry(f,width=48);u.grid(row=0,column=1);u.insert(0,self.store.get("android_url") or "")
+        tk.Label(f,text="Pairing token").grid(row=1,column=0,sticky="w",pady=5);t=tk.Entry(f,width=48);t.grid(row=1,column=1);t.insert(0,self.store.get("token") or "")
+        tk.Button(f,text="Save",command=lambda:(self.store.set("android_url",u.get().strip()),self.store.set("token",t.get().strip()),w.destroy())).grid(row=2,column=1,sticky="e",pady=10)
+
+    def change_password(self):
+        old=simpledialog.askstring(APP,"Current password",show="*")
+        if old!=self.store.get("password"):return messagebox.showerror(APP,"Current password is incorrect.")
+        new=simpledialog.askstring(APP,"New password",show="*")
+        if new and len(new)>=4:self.store.set("password",new);messagebox.showinfo(APP,"Password changed.")
+
+    def backup(self):
+        p=filedialog.asksaveasfilename(defaultextension=".db",filetypes=[("GSMS backup","*.db")])
+        if p:self.store.backup(p);messagebox.showinfo(APP,"Backup created successfully.")
+
+if __name__=="__main__":
+    root=tk.Tk(); App(root); root.mainloop()
