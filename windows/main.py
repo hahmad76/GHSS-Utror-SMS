@@ -39,7 +39,6 @@ class DBStore:
         return row[0] if row else None
     def set(self, k, v):
         with self.lock:
-            # Keep compatibility with the older SQLite version bundled with Python 3.6.
             self.db.execute("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, v))
             self.db.commit()
     def contacts(self):
@@ -96,8 +95,8 @@ class App:
         self.q=queue.Queue()
         self.checked=set()
         root.title(APP + " - " + SCHOOL)
-        root.geometry("1120x720")
-        root.minsize(900,600)
+        root.geometry("1220x720")
+        root.minsize(980,600)
         self.build_login()
 
     def clear(self):
@@ -122,7 +121,7 @@ class App:
     def build_main(self):
         self.clear()
         self.checked=set()
-        self.root.geometry("1120x720")
+        self.root.geometry("1220x720")
         tk.Label(self.root,text=SCHOOL,bg="#dce9c4",font=("Segoe UI",16,"bold"),pady=5).pack(fill="x")
         tk.Label(self.root,text="GSMS SMS SOFTWARE",bg="#f9c08f",font=("Segoe UI",17,"bold"),pady=5).pack(fill="x")
         tk.Label(self.root,text="Version 1.0",font=("Segoe UI",10,"italic")).pack(anchor="e",padx=14,pady=(2,4))
@@ -134,10 +133,10 @@ class App:
         tk.Button(toolbar,text="Backup",command=self.backup).pack(side="right",padx=3)
         tk.Button(toolbar,text="Change Password",command=self.change_password).pack(side="right",padx=3)
         table_frame=tk.Frame(self.root,bd=1,relief="solid"); table_frame.pack(fill="both",expand=True,padx=10,pady=5)
-        cols=("check","roll","name","father","class","section")
+        cols=("check","roll","name","father","class","section","mobile")
         self.tree=ttk.Treeview(table_frame,columns=cols,show="headings",selectmode="browse")
-        headings={"check":"","roll":"Roll No","name":"Name","father":"Father Name","class":"Class","section":"Section"}
-        widths={"check":45,"roll":95,"name":220,"father":220,"class":100,"section":100}
+        headings={"check":"","roll":"Roll No","name":"Name","father":"Father Name","class":"Class","section":"Section","mobile":"Mobile No"}
+        widths={"check":45,"roll":90,"name":205,"father":205,"class":85,"section":85,"mobile":135}
         for c in cols:
             self.tree.heading(c,text=headings[c]); self.tree.column(c,width=widths[c],anchor="w")
         self.tree.column("check",anchor="center")
@@ -160,7 +159,7 @@ class App:
         self.checked=set()
         for r in self.store.contacts():
             rid,roll,name,father,cls,section,phone,group_name,kind=r
-            self.tree.insert("","end",iid=str(rid),values=("☐",roll or "",name or "",father or "",cls or "",section or ""))
+            self.tree.insert("","end",iid=str(rid),values=("☐",roll or "",name or "",father or "",cls or "",section or "",phone or ""))
 
     def toggle_check(self,event):
         item=self.tree.identify_row(event.y); col=self.tree.identify_column(event.x)
