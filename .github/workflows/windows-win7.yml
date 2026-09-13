@@ -33,3 +33,5 @@ jobs:
         with:
           name: GSMS_SMS_v1.0-Windows-7-10-11-32-64
           path: dist/GSMS_SMS_v1.0_Windows_7_10_11_32_64.exe
+
+# Rebuild trigger for corrected SQLite-compatible source.
