@@ -1,14 +1,18 @@
 import csv, json, os, queue, sqlite3, threading, time, shutil
 from datetime import datetime
-from pathlib import Path
 from urllib import request
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 APP = "GSMS SMS v1.0"
 SCHOOL = "Govt. Higher Secondary School Utror Swat"
-DB = Path(os.getenv("APPDATA", Path.home())) / "GSMS_SMS_v1" / "gsms.db"
-DB.parent.mkdir(parents=True, exist_ok=True)
+# Use plain strings here instead of pathlib.Path objects. This keeps the
+# application compatible with older Python/Windows combinations, including
+# Windows 7, and avoids the WindowsPath TypeError seen in the previous build.
+APPDATA = os.getenv("APPDATA") or os.path.expanduser("~")
+DB = os.path.join(APPDATA, "GSMS_SMS_v1", "gsms.db")
+if not os.path.isdir(os.path.dirname(DB)):
+    os.makedirs(os.path.dirname(DB))
 DEFAULT_PASSWORD = "1234"
 MAX_15, MAX_HOUR, MAX_DAY = 150, 250, 750
 
