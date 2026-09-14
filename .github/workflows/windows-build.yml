@@ -45,6 +45,10 @@ jobs:
         working-directory: windows
         run: python patch_build.py
 
+      - name: Adjust UI to fit above Windows taskbar
+        working-directory: windows
+        run: python adjust_ui.py
+
       - name: Build standalone executable with Win7-compatible Python runtime
         working-directory: windows
         run: |
