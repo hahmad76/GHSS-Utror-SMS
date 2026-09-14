@@ -56,9 +56,26 @@ jobs:
           if (!(Test-Path "dist/GSMS_SMS_v1.0_Windows_7_10_11_${{ matrix.arch }}.exe")) { exit 1 }
           Get-Item "dist/GSMS_SMS_v1.0_Windows_7_10_11_${{ matrix.arch }}.exe" | Format-List Name,Length,LastWriteTime
 
+      - name: Build Windows installer with desktop shortcut
+        if: matrix.arch == 'x86'
+        working-directory: windows
+        shell: powershell
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
+          if (!(Test-Path "dist/installer/GSMS_SMS_v1.0_Setup_x86.exe")) { throw "Installer was not produced" }
+
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
           name: GSMS_SMS_v1.0_Windows_7_10_11_${{ matrix.arch }}
           path: windows/dist/GSMS_SMS_v1.0_Windows_7_10_11_${{ matrix.arch }}.exe
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        if: matrix.arch == 'x86'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GSMS_SMS_v1.0_Windows_7_10_11_Setup
+          path: windows/dist/installer/GSMS_SMS_v1.0_Setup_x86.exe
           if-no-files-found: error
