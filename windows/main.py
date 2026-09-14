@@ -146,9 +146,10 @@ class App:
         self.tree.bind("<Double-1>",self.edit_student)
         self.refresh_students()
         tk.Label(self.root,text="Message",font=("Segoe UI",10,"bold"),anchor="w").pack(fill="x",padx=12,pady=(4,0))
-        self.message=tk.Text(self.root,height=7,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")
-        self.message.pack(fill="x",padx=10,pady=(2,5))
-        bottom=tk.Frame(self.root); bottom.pack(fill="x",padx=10,pady=(0,10))
+        # Keep the compose area compact so SEND SMS is always visible on 720px-class displays.
+        self.message=tk.Text(self.root,height=4,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")
+        self.message.pack(fill="x",padx=10,pady=(2,3))
+        bottom=tk.Frame(self.root); bottom.pack(fill="x",padx=10,pady=(0,4))
         self.status=tk.StringVar(value="Ready — check the students who should receive the SMS.")
         tk.Label(bottom,textvariable=self.status,anchor="w").pack(side="left",fill="x",expand=True)
         tk.Button(bottom,text="SEND SMS",font=("Segoe UI",11,"bold"),width=16,command=self.send_checked).pack(side="right")
@@ -253,37 +254,47 @@ class App:
             try:
                 self.pause.wait()
                 while not self.limiter.can_send():
-                    wait=self.limiter.wait_seconds();self.status_set("Safety limit reached; waiting about %d minute(s)."%(int(wait//60)+1));time.sleep(min(max(wait,1),60));self.pause.wait()
-                ok,detail=self.send_android(phone,msg)
-                self.store.log(phone,msg,"accepted" if ok else "failed")
-                if ok:self.limiter.mark(); self.status_set("Accepted: %s (%s)"%(name,phone))
-                else:self.status_set("Failed: %s — %s"%(name,detail))
+                    wait=self.limiter.wait_seconds();self.status_set("Safety limit reached; waiting about %d minute(s)."%(int(wait//60)+1));time.sleep(min(max(wait,1),60))
+                base=self.store.get("android_url") or "http://192.168.1.100:8765"
+                token=self.store.get("token") or ""
+                if not token: raise RuntimeError("Android gateway token is not configured. Open Settings and enter the token shown by the Android GSMS gateway.")
+                url=base.rstrip("/")+"/send"
+                payload=json.dumps({"phone":phone,"message":msg,"sender":"GHSS Utror"}).encode("utf-8")
+                req=request.Request(url,data=payload,headers={"Content-Type":"application/json","x-gsms-token":token},method="POST")
+                with request.urlopen(req,timeout=20) as r: body=r.read().decode("utf-8","ignore")
+                self.limiter.mark();self.store.log(phone,msg,"SENT")
+                self.status_set("Sent to %s."%name)
+            except Exception as e:
+                self.store.log(phone,msg,"FAILED: "+str(e));self.status_set("Failed for %s: %s"%(name,e))
             finally:self.q.task_done()
 
-    def status_set(self,t): self.root.after(0,lambda:self.status.set(t))
-    def send_android(self,phone,msg):
-        base=(self.store.get("android_url") or "").rstrip("/"); token=self.store.get("token") or ""
-        data=json.dumps({"phone":phone,"message":msg}).encode()
-        req=request.Request(base+"/send",data=data,method="POST",headers={"Content-Type":"application/json","X-GSMS-Token":token})
-        try:
-            with request.urlopen(req,timeout=12) as r:return r.status==200,r.read().decode(errors="replace")
-        except Exception as e:return False,str(e)
+    def status_set(self,text):
+        self.root.after(0,lambda:self.status.set(text))
 
     def settings(self):
-        w=tk.Toplevel(self.root);w.title("Gateway Settings");f=tk.Frame(w,padx=20,pady=20);f.pack()
-        tk.Label(f,text="Android URL").grid(row=0,column=0,sticky="w",pady=5);u=tk.Entry(f,width=48);u.grid(row=0,column=1);u.insert(0,self.store.get("android_url") or "")
-        tk.Label(f,text="Pairing token").grid(row=1,column=0,sticky="w",pady=5);t=tk.Entry(f,width=48);t.grid(row=1,column=1);t.insert(0,self.store.get("token") or "")
-        tk.Button(f,text="Save",command=lambda:(self.store.set("android_url",u.get().strip()),self.store.set("token",t.get().strip()),w.destroy())).grid(row=2,column=1,sticky="e",pady=10)
+        w=tk.Toplevel(self.root);w.title("Gateway Settings");w.resizable(False,False)
+        f=tk.Frame(w,padx=18,pady=18);f.pack()
+        tk.Label(f,text="Android URL").grid(row=0,column=0,sticky="w",pady=5)
+        u=tk.Entry(f,width=42);u.grid(row=0,column=1,pady=5);u.insert(0,self.store.get("android_url") or "")
+        tk.Label(f,text="Pairing token").grid(row=1,column=0,sticky="w",pady=5)
+        t=tk.Entry(f,width=42,show="*");t.grid(row=1,column=1,pady=5);t.insert(0,self.store.get("token") or "")
+        tk.Label(f,text="USB data-cable mode: enable USB tethering on the Android phone, then use the URL shown by GSMS.",wraplength=420,justify="left").grid(row=2,column=0,columnspan=2,sticky="w",pady=(8,10))
+        def save():
+            self.store.set("android_url",u.get().strip());self.store.set("token",t.get().strip());w.destroy();self.status.set("Gateway settings saved.")
+        tk.Button(f,text="Save",width=12,command=save).grid(row=3,column=1,sticky="e",pady=5)
 
     def change_password(self):
-        old=simpledialog.askstring(APP,"Current password",show="*")
-        if old!=self.store.get("password"):return messagebox.showerror(APP,"Current password is incorrect.")
-        new=simpledialog.askstring(APP,"New password",show="*")
-        if new and len(new)>=4:self.store.set("password",new);messagebox.showinfo(APP,"Password changed.")
+        old=simpledialog.askstring(APP,"Current password:",show="*")
+        if old is None:return
+        if old!=self.store.get("password"):return messagebox.showerror(APP,"Incorrect current password.")
+        new=simpledialog.askstring(APP,"New password:",show="*")
+        if new:self.store.set("password",new);messagebox.showinfo(APP,"Password changed.")
 
     def backup(self):
-        p=filedialog.asksaveasfilename(defaultextension=".db",filetypes=[("GSMS backup","*.db")])
-        if p:self.store.backup(p);messagebox.showinfo(APP,"Backup created successfully.")
+        p=filedialog.asksaveasfilename(defaultextension=".db",filetypes=[("GSMS database","*.db")])
+        if p:
+            try:self.store.backup(p);messagebox.showinfo(APP,"Backup saved.")
+            except Exception as e:messagebox.showerror(APP,"Backup failed: %s"%e)
 
 if __name__=="__main__":
-    root=tk.Tk(); App(root); root.mainloop()
+    root=tk.Tk();App(root);root.mainloop()
