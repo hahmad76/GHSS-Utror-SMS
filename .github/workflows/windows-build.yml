@@ -41,6 +41,10 @@ jobs:
           python -m pip install -r windows/requirements.txt
           python -m pip install "pyinstaller==5.13.2"
 
+      - name: Apply GSMS v1.0 upgrade
+        working-directory: windows
+        run: python patch_build.py
+
       - name: Build standalone executable with Win7-compatible Python runtime
         working-directory: windows
         run: |
