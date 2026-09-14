@@ -24,6 +24,10 @@ jobs:
           python -m pip install --upgrade "pip<22"
           python -m pip install pyinstaller==5.13.2 openpyxl==3.0.10
 
+      - name: Apply GSMS v1.0 upgrade
+        working-directory: windows
+        run: python patch_build.py
+
       - name: Build portable Windows EXE
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name GSMS_SMS_v1.0_Windows_7_10_11_32_64 windows/production.py
