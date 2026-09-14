@@ -36,7 +36,9 @@ public class SmsGatewayService extends Service {
     private synchronized void startGateway() {
         if (running) return;
         clearState();
-        startForeground(NOTIFICATION_ID, notification("Starting GSMS gateway on port " + GatewayConfig.PORT));
+        String ip = GatewayConfig.getLocalIp(this);
+        String token = GatewayConfig.getToken(this);
+        startForeground(NOTIFICATION_ID, notification("PC gateway: " + ip + ":" + GatewayConfig.PORT + " | Token: " + token));
         running = true;
         pool = Executors.newCachedThreadPool();
         pool.execute(this::serverLoop);
@@ -49,7 +51,7 @@ public class SmsGatewayService extends Service {
             ss.bind(new InetSocketAddress(InetAddress.getByName("0.0.0.0"), GatewayConfig.PORT), 20);
             server = ss;
             setState(true, "");
-            updateNotification("GSMS SMS gateway running on port " + GatewayConfig.PORT);
+            updateNotification("PC gateway READY: " + GatewayConfig.getLocalIp(this) + ":" + GatewayConfig.PORT + " | Token: " + GatewayConfig.getToken(this));
             while (running) {
                 Socket s = server.accept();
                 pool.execute(() -> handle(s));
@@ -78,10 +80,9 @@ public class SmsGatewayService extends Service {
             String method = requestParts[0];
             String path = requestParts[1];
 
-            // Browser health check: GET http://PHONE-IP:8765/ should now return a response.
             if ("GET".equalsIgnoreCase(method)) {
                 if ("/".equals(path) || "/health".equals(path)) {
-                    String body = "{\"ok\":true,\"service\":\"GSMS SMS Gateway\",\"port\":" + GatewayConfig.PORT + "}";
+                    String body = "{\"ok\":true,\"service\":\"GSMS SMS Gateway\",\"port\":" + GatewayConfig.PORT + ",\"ip\":\"" + GatewayConfig.getLocalIp(this) + "\"}";
                     reply(s,200,body,true);
                 } else reply(s,404,"Not found");
                 return;
@@ -139,7 +140,7 @@ public class SmsGatewayService extends Service {
         s.getOutputStream().flush();
     }
 
-    private Notification notification(String text){ return new Notification.Builder(this,"gsms").setSmallIcon(android.R.drawable.sym_action_email).setContentTitle("GSMS SMS v1.0").setContentText(text).setOngoing(true).build(); }
+    private Notification notification(String text){ return new Notification.Builder(this,"gsms").setSmallIcon(android.R.drawable.sym_action_email).setContentTitle("GSMS SMS v1.0").setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setOngoing(true).build(); }
     private void updateNotification(String text){ ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION_ID, notification(text)); }
     private void createChannel(){ if(Build.VERSION.SDK_INT>=26){ NotificationManager nm=getSystemService(NotificationManager.class); nm.createNotificationChannel(new NotificationChannel("gsms","GSMS SMS Gateway",NotificationManager.IMPORTANCE_LOW)); } }
     private void setState(boolean ok, String error){ getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean(KEY_RUNNING,ok).putString(KEY_ERROR,error==null?"":error).apply(); }
