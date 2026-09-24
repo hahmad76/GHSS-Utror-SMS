@@ -95,8 +95,9 @@ class App:
         self.q=queue.Queue()
         self.checked=set()
         root.title(APP + " - " + SCHOOL)
-        root.geometry("1220x720")
-        root.minsize(980,600)
+        # Keep the main window within the visible work area on Windows 7/10/11.
+        root.geometry("1220x650")
+        root.minsize(980,560)
         self.build_login()
 
     def clear(self):
@@ -121,7 +122,7 @@ class App:
     def build_main(self):
         self.clear()
         self.checked=set()
-        self.root.geometry("1220x720")
+        self.root.geometry("1220x650")
         tk.Label(self.root,text=SCHOOL,bg="#dce9c4",font=("Segoe UI",16,"bold"),pady=5).pack(fill="x")
         tk.Label(self.root,text="GSMS SMS SOFTWARE",bg="#f9c08f",font=("Segoe UI",17,"bold"),pady=5).pack(fill="x")
         tk.Label(self.root,text="Version 1.0",font=("Segoe UI",10,"italic")).pack(anchor="e",padx=14,pady=(2,4))
@@ -145,11 +146,11 @@ class App:
         self.tree.bind("<Button-1>",self.toggle_check)
         self.tree.bind("<Double-1>",self.edit_student)
         self.refresh_students()
-        tk.Label(self.root,text="Message",font=("Segoe UI",10,"bold"),anchor="w").pack(fill="x",padx=12,pady=(4,0))
-        # Keep the compose area compact so SEND SMS is always visible on 720px-class displays.
-        self.message=tk.Text(self.root,height=4,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")
-        self.message.pack(fill="x",padx=10,pady=(2,3))
-        bottom=tk.Frame(self.root); bottom.pack(fill="x",padx=10,pady=(0,4))
+        tk.Label(self.root,text="Message",font=("Segoe UI",10,"bold"),anchor="w").pack(fill="x",padx=12,pady=(3,0))
+        # Compact compose area: the SEND SMS button stays visible above the taskbar.
+        self.message=tk.Text(self.root,height=2,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")
+        self.message.pack(fill="x",padx=10,pady=(1,2))
+        bottom=tk.Frame(self.root); bottom.pack(fill="x",padx=10,pady=(0,3))
         self.status=tk.StringVar(value="Ready — check the students who should receive the SMS.")
         tk.Label(bottom,textvariable=self.status,anchor="w").pack(side="left",fill="x",expand=True)
         tk.Button(bottom,text="SEND SMS",font=("Segoe UI",11,"bold"),width=16,command=self.send_checked).pack(side="right")
