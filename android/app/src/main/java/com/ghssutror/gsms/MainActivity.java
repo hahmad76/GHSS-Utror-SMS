@@ -105,6 +105,51 @@ public class MainActivity extends Activity {
         updateFilterOptions();
     }
 
+    private void showGatewaySettings() {
+        final EditText tokenInput = new EditText(this);
+        tokenInput.setSingleLine(true);
+        tokenInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        tokenInput.setHint("Enter gateway token");
+        tokenInput.setText(GatewayConfig.getToken(this));
+        tokenInput.setSelection(tokenInput.length());
+
+        String ip = GatewayConfig.getLocalIp(this);
+        String url = "http://" + ip + ":" + GatewayConfig.PORT;
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, 0, pad, 0);
+
+        TextView info = new TextView(this);
+        info.setText("Gateway URL:\n" + url + "\n\nThe Windows GSMS software must use this URL and the same token.\n\nToken:");
+        info.setTextSize(15);
+        box.addView(info);
+        box.addView(tokenInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Android Gateway Settings")
+                .setView(box)
+                .setPositiveButton("SAVE TOKEN", (dialog, which) -> {
+                    String token = tokenInput.getText().toString().trim();
+                    if (token.isEmpty()) {
+                        Toast.makeText(this, "Gateway token cannot be empty.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    GatewayConfig.setToken(this, token);
+                    status.setText("Gateway token saved. PC Gateway URL: " + url);
+                    Toast.makeText(this, "Gateway token saved successfully.", Toast.LENGTH_LONG).show();
+                })
+                .setNeutralButton("GENERATE NEW", (dialog, which) -> {
+                    String token = "GSMS-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.US);
+                    GatewayConfig.setToken(this, token);
+                    status.setText("New gateway token generated. Open Gateway Settings to view it.");
+                    Toast.makeText(this, "New gateway token generated.", Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
     private void requestRequiredPermissions() {
         if (Build.VERSION.SDK_INT >= 23) {
             ArrayList<String> missing = new ArrayList<>();
