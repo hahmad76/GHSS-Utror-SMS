@@ -15,7 +15,14 @@ public final class GatewayConfig {
     private static final String TOKEN = "token";
     private GatewayConfig() {}
 
-    public static void setToken(Context c, String token) {\n        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(TOKEN, token == null ? "" : token.trim()).apply();\n    }\n\n    public static String getToken(Context c) {
+    public static void setToken(Context c, String token) {
+        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(TOKEN, token == null ? "" : token.trim())
+                .apply();
+    }
+
+    public static String getToken(Context c) {
         String t = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TOKEN, null);
         if (t == null || t.trim().isEmpty()) {
             t = "GSMS-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.US);
