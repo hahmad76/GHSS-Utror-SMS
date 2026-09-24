@@ -2,12 +2,14 @@ package com.ghssutror.gsms;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.InputType;
 import android.telephony.SmsManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
@@ -15,6 +17,7 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -108,7 +111,7 @@ public class MainActivity extends Activity {
     private void showGatewaySettings() {
         final EditText tokenInput = new EditText(this);
         tokenInput.setSingleLine(true);
-        tokenInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        tokenInput.setInputType(InputType.TYPE_CLASS_TEXT);
         tokenInput.setHint("Enter gateway token");
         tokenInput.setText(GatewayConfig.getToken(this));
         tokenInput.setSelection(tokenInput.length());
