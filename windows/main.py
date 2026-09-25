@@ -367,11 +367,18 @@ class App:
                 self.pause.wait()
                 while not self.limiter.can_send():
                     wait=self.limiter.wait_seconds();self.status_set("Safety limit reached; waiting about %d minute(s)."%(int(wait//60)+1));time.sleep(min(max(wait,1),60))
-                mode = self.store.get("gateway_mode") or "Android Gateway"
+                mode = self.store.get("gateway_mode") or "USB Modem / Wingle"
                 if mode == "USB Modem / Wingle":
                     self._send_modem_sms(phone, msg)
                 else:
-                    self._send_android_sms(phone, msg)
+                    # If Android Gateway is selected but no pairing token is configured,
+                    # automatically fall back to a directly connected USB modem/Wingle.
+                    token = self.store.get("token") or ""
+                    if not token and self._find_modem_port():
+                        self.status_set("USB Wingle detected; sending through the PC modem.")
+                        self._send_modem_sms(phone, msg)
+                    else:
+                        self._send_android_sms(phone, msg)
                 self.limiter.mark();self.store.log(phone,msg,"SENT")
                 self.status_set("Sent to %s."%name)
             except Exception as e:
