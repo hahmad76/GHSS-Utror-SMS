@@ -1,4 +1,4 @@
-import csv, json, os, queue, sqlite3, threading, time, shutil
+import csv, json, os, queue, sqlite3, threading, time, shutil, re
 from datetime import datetime
 from urllib import request
 import tkinter as tk
@@ -27,6 +27,9 @@ class DBStore:
         if self.get("password") is None: self.set("password", DEFAULT_PASSWORD)
         if self.get("android_url") is None: self.set("android_url", "http://192.168.1.100:8765")
         if self.get("token") is None: self.set("token", "")
+        if self.get("gateway_mode") is None: self.set("gateway_mode", "Android Gateway")
+        if self.get("modem_port") is None: self.set("modem_port", "AUTO")
+        if self.get("modem_baud") is None: self.set("modem_baud", "115200")
 
     def _migrate_contacts(self):
         cols = {r[1] for r in self.db.execute("PRAGMA table_info(contacts)").fetchall()}
@@ -96,8 +99,8 @@ class App:
         self.checked=set()
         root.title(APP + " - " + SCHOOL)
         # Keep the main window within the visible work area on Windows 7/10/11.
-        root.geometry("1220x650")
-        root.minsize(980,560)
+        root.geometry("1220x600")
+        root.minsize(980,540)
         self.build_login()
 
     def clear(self):
@@ -122,7 +125,7 @@ class App:
     def build_main(self):
         self.clear()
         self.checked=set()
-        self.root.geometry("1220x650")
+        self.root.geometry("1220x600")
         tk.Label(self.root,text=SCHOOL,bg="#dce9c4",font=("Segoe UI",16,"bold"),pady=5).pack(fill="x")
         tk.Label(self.root,text="GSMS SMS SOFTWARE",bg="#f9c08f",font=("Segoe UI",17,"bold"),pady=5).pack(fill="x")
         tk.Label(self.root,text="Version 1.0",font=("Segoe UI",10,"italic")).pack(anchor="e",padx=14,pady=(2,4))
@@ -249,6 +252,91 @@ class App:
         for r in rows:self.q.put((r[6],text,r[2] or "Student"))
         self.status.set("Queued %d SMS(s) for sending."%len(rows))
 
+    def _serial_ports(self):
+        try:
+            import serial.tools.list_ports
+            return [(p.device, p.description or p.manufacturer or "") for p in serial.tools.list_ports.comports()]
+        except Exception:
+            return []
+
+    def _find_modem_port(self):
+        configured = (self.store.get("modem_port") or "AUTO").strip()
+        ports = self._serial_ports()
+        if configured and configured.upper() != "AUTO":
+            return configured
+        # Prefer ports whose description identifies a modem/USB serial interface.
+        for dev, desc in ports:
+            s = (desc or "").lower()
+            if any(k in s for k in ("modem", "mobile connect", "huawei", "gsm", "lte", "wwan", "usb serial", "mobile broadband")):
+                return dev
+        return ports[0][0] if ports else None
+
+    def _at(self, ser, command, wait=0.8):
+        ser.reset_input_buffer()
+        ser.write((command + "\r").encode("ascii", "ignore"))
+        time.sleep(wait)
+        data = ser.read_all().decode("utf-8", "ignore")
+        return data
+
+    def _send_modem_sms(self, phone, msg):
+        import serial
+        port = self._find_modem_port()
+        if not port:
+            raise RuntimeError("No USB modem/Wingle COM port was detected. Connect the modem and install its Windows driver.")
+        try:
+            baud = int(self.store.get("modem_baud") or "115200")
+        except Exception:
+            baud = 115200
+        last_error = None
+        # Common USB modem baud rates. The configured rate is tried first.
+        rates = [baud] + [r for r in (115200, 460800, 9600) if r != baud]
+        for rate in rates:
+            try:
+                with serial.Serial(port, rate, timeout=2, write_timeout=3) as ser:
+                    if "OK" not in self._at(ser, "AT", 1.0).upper():
+                        continue
+                    pin = self._at(ser, "AT+CPIN?", 0.8).upper()
+                    if "READY" not in pin and "OK" not in pin:
+                        raise RuntimeError("SIM is not ready: " + pin.strip())
+                    reg = self._at(ser, "AT+CREG?", 0.8).upper()
+                    if not re.search(r"\+CREG:\s*\d+\s*,\s*[145]", reg):
+                        reg2 = self._at(ser, "AT+CGREG?", 0.8).upper()
+                        if not re.search(r"\+CGREG:\s*\d+\s*,\s*[145]", reg2):
+                            raise RuntimeError("Modem is not registered on the mobile network.")
+                    cs = self._at(ser, "AT+CSQ", 0.8)
+                    self.status_set("USB modem %s ready; signal %s" % (port, cs.strip().replace("\r"," ").replace("\n"," ")))
+                    r = self._at(ser, "AT+CMGF=1", 0.5).upper()
+                    if "OK" not in r:
+                        raise RuntimeError("Modem does not accept SMS text mode.")
+                    # Set SMS centre only when the modem/SIM reports one; otherwise leave it to the network/SIM.
+                    self._at(ser, "AT+CSCA?", 0.5)
+                    ser.reset_input_buffer()
+                    ser.write(("AT+CMGS=\"" + phone + "\"\r").encode("ascii", "ignore"))
+                    time.sleep(1.0)
+                    prompt = ser.read_all().decode("utf-8", "ignore")
+                    if ">" not in prompt:
+                        raise RuntimeError("Modem did not provide the SMS prompt: " + prompt.strip())
+                    ser.write(msg.encode("utf-8", "ignore") + b"\x1a")
+                    time.sleep(4)
+                    result = ser.read_all().decode("utf-8", "ignore").upper()
+                    if "OK" not in result and "+CMGS:" not in result:
+                        raise RuntimeError("SMS send failed: " + result.strip())
+                    return True
+            except Exception as e:
+                last_error = e
+        raise RuntimeError(str(last_error) if last_error else "Unable to communicate with the USB modem.")
+
+    def _send_android_sms(self, phone, msg):
+        base=self.store.get("android_url") or "http://192.168.1.100:8765"
+        token=self.store.get("token") or ""
+        if not token:
+            raise RuntimeError("Android gateway token is not configured. Open Settings and enter the token shown by the Android GSMS gateway.")
+        url=base.rstrip("/")+"/send"
+        payload=json.dumps({"phone":phone,"message":msg,"sender":"GHSS Utror"}).encode("utf-8")
+        req=request.Request(url,data=payload,headers={"Content-Type":"application/json","x-gsms-token":token},method="POST")
+        with request.urlopen(req,timeout=20) as r:
+            return r.read().decode("utf-8","ignore")
+
     def worker(self):
         while True:
             phone,msg,name=self.q.get()
@@ -256,13 +344,11 @@ class App:
                 self.pause.wait()
                 while not self.limiter.can_send():
                     wait=self.limiter.wait_seconds();self.status_set("Safety limit reached; waiting about %d minute(s)."%(int(wait//60)+1));time.sleep(min(max(wait,1),60))
-                base=self.store.get("android_url") or "http://192.168.1.100:8765"
-                token=self.store.get("token") or ""
-                if not token: raise RuntimeError("Android gateway token is not configured. Open Settings and enter the token shown by the Android GSMS gateway.")
-                url=base.rstrip("/")+"/send"
-                payload=json.dumps({"phone":phone,"message":msg,"sender":"GHSS Utror"}).encode("utf-8")
-                req=request.Request(url,data=payload,headers={"Content-Type":"application/json","x-gsms-token":token},method="POST")
-                with request.urlopen(req,timeout=20) as r: body=r.read().decode("utf-8","ignore")
+                mode = self.store.get("gateway_mode") or "Android Gateway"
+                if mode == "USB Modem / Wingle":
+                    self._send_modem_sms(phone, msg)
+                else:
+                    self._send_android_sms(phone, msg)
                 self.limiter.mark();self.store.log(phone,msg,"SENT")
                 self.status_set("Sent to %s."%name)
             except Exception as e:
@@ -275,14 +361,49 @@ class App:
     def settings(self):
         w=tk.Toplevel(self.root);w.title("Gateway Settings");w.resizable(False,False)
         f=tk.Frame(w,padx=18,pady=18);f.pack()
-        tk.Label(f,text="Android URL").grid(row=0,column=0,sticky="w",pady=5)
-        u=tk.Entry(f,width=42);u.grid(row=0,column=1,pady=5);u.insert(0,self.store.get("android_url") or "")
-        tk.Label(f,text="Pairing token").grid(row=1,column=0,sticky="w",pady=5)
-        t=tk.Entry(f,width=42,show="*");t.grid(row=1,column=1,pady=5);t.insert(0,self.store.get("token") or "")
-        tk.Label(f,text="USB data-cable mode: enable USB tethering on the Android phone, then use the URL shown by GSMS.",wraplength=420,justify="left").grid(row=2,column=0,columnspan=2,sticky="w",pady=(8,10))
+        tk.Label(f,text="Gateway mode").grid(row=0,column=0,sticky="w",pady=5)
+        mode=tk.StringVar(value=self.store.get("gateway_mode") or "Android Gateway")
+        cb=ttk.Combobox(f,textvariable=mode,state="readonly",width=39,values=("Android Gateway","USB Modem / Wingle"))
+        cb.grid(row=0,column=1,pady=5)
+        tk.Label(f,text="Android URL").grid(row=1,column=0,sticky="w",pady=5)
+        u=tk.Entry(f,width=42);u.grid(row=1,column=1,pady=5);u.insert(0,self.store.get("android_url") or "")
+        tk.Label(f,text="Pairing token").grid(row=2,column=0,sticky="w",pady=5)
+        t=tk.Entry(f,width=42,show="*");t.grid(row=2,column=1,pady=5);t.insert(0,self.store.get("token") or "")
+        tk.Label(f,text="USB modem COM port").grid(row=3,column=0,sticky="w",pady=5)
+        port=tk.StringVar(value=self.store.get("modem_port") or "AUTO")
+        pcb=ttk.Combobox(f,textvariable=port,width=39)
+        pcb.grid(row=3,column=1,pady=5)
+        def scan_ports():
+            vals=["AUTO"]+[p[0] for p in self._serial_ports()]
+            pcb["values"]=vals
+            if port.get() not in vals: port.set("AUTO")
+        scan_ports()
+        tk.Button(f,text="Scan Ports",command=scan_ports).grid(row=4,column=1,sticky="w",pady=2)
+        tk.Label(f,text="Modem baud rate").grid(row=5,column=0,sticky="w",pady=5)
+        baud=tk.StringVar(value=self.store.get("modem_baud") or "115200")
+        bcb=ttk.Combobox(f,textvariable=baud,state="readonly",width=39,values=("115200","460800","9600"))
+        bcb.grid(row=5,column=1,pady=5)
+        def test_modem():
+            try:
+                if mode.get() != "USB Modem / Wingle":
+                    messagebox.showinfo(APP,"Select USB Modem / Wingle first.")
+                    return
+                self.store.set("modem_port",port.get().strip() or "AUTO")
+                self.store.set("modem_baud",baud.get().strip() or "115200")
+                self._send_modem_sms("__TEST_ONLY__", "")
+                messagebox.showinfo(APP,"USB modem communication test completed.")
+            except Exception as e:
+                messagebox.showerror(APP,"USB modem test failed:\n%s"%e)
+        tk.Button(f,text="Test USB Modem",command=test_modem).grid(row=6,column=1,sticky="w",pady=4)
+        tk.Label(f,text="USB modem mode uses standard Windows COM/AT SMS interfaces. Compatible Huawei, ZTE and other GSM/LTE modems can be detected when their drivers expose a modem COM port.",wraplength=470,justify="left").grid(row=7,column=0,columnspan=2,sticky="w",pady=(8,10))
         def save():
-            self.store.set("android_url",u.get().strip());self.store.set("token",t.get().strip());w.destroy();self.status.set("Gateway settings saved.")
-        tk.Button(f,text="Save",width=12,command=save).grid(row=3,column=1,sticky="e",pady=5)
+            self.store.set("gateway_mode",mode.get().strip())
+            self.store.set("android_url",u.get().strip())
+            self.store.set("token",t.get().strip())
+            self.store.set("modem_port",port.get().strip() or "AUTO")
+            self.store.set("modem_baud",baud.get().strip() or "115200")
+            w.destroy();self.status.set("Gateway settings saved.")
+        tk.Button(f,text="Save",width=12,command=save).grid(row=8,column=1,sticky="e",pady=5)
 
     def change_password(self):
         old=simpledialog.askstring(APP,"Current password:",show="*")
