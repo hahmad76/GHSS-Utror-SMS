@@ -135,3 +135,17 @@ new_clear='''    def clear_checks(self):\n        self.checked.clear(); self.ref
 s=s.replace(old_clear,new_clear)
 s=s.replace('messagebox.showinfo(APP,"Imported %d student(s)."%count)', 'messagebox.showinfo(APP,"Imported %d person(s).\\n\\nRecords are stored locally and do not need re-importing on every launch."%count)')
 p.write_text(s,encoding='utf-8')
+
+# Final GSMS v1.0 corrections applied AFTER all feature patches:
+# 1) Force a compact main window so the Send SMS button remains above the taskbar.
+# 2) Force a compact two-line message box.
+# 3) Use the USB Modem / Wingle path by default for the PC-connected Wingle setup.
+s = s.replace('self.root.geometry("1280x820")', 'self.root.geometry("1180x560")')
+s = s.replace('self.root.geometry("1220x650")', 'self.root.geometry("1180x560")')
+s = s.replace('self.root.geometry("1220x600")', 'self.root.geometry("1180x560")')
+s = s.replace('self.message=tk.Text(self.root,height=6,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")',
+              'self.message=tk.Text(self.root,height=2,wrap="word",font=("Segoe UI",11),bd=2,relief="sunken")')
+s = s.replace('self.store.set("gateway_mode", "Android Gateway")', 'self.store.set("gateway_mode", "USB Modem / Wingle")')
+s = s.replace('self.get("gateway_mode") is None: self.set("gateway_mode", "Android Gateway")',
+              'self.get("gateway_mode") is None: self.set("gateway_mode", "USB Modem / Wingle")')
+p.write_text(s,encoding='utf-8')
