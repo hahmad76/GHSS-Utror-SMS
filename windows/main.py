@@ -278,6 +278,29 @@ class App:
         data = ser.read_all().decode("utf-8", "ignore")
         return data
 
+    def _test_modem(self):
+        import serial
+        port = self._find_modem_port()
+        if not port:
+            raise RuntimeError("No USB modem/Wingle COM port was detected.")
+        try:
+            baud = int(self.store.get("modem_baud") or "115200")
+        except Exception:
+            baud = 115200
+        last_error = None
+        for rate in [baud] + [r for r in (115200, 460800, 9600) if r != baud]:
+            try:
+                with serial.Serial(port, rate, timeout=2, write_timeout=3) as ser:
+                    ati=self._at(ser,"ATI",1.0)
+                    cpin=self._at(ser,"AT+CPIN?",0.8)
+                    csq=self._at(ser,"AT+CSQ",0.8)
+                    reg=self._at(ser,"AT+CREG?",0.8)
+                    if "OK" not in ati.upper(): continue
+                    return "Port: %s\\nBaud: %s\\n\\n%s\\nSIM: %s\\nSignal: %s\\nRegistration: %s" % (port,rate,ati.strip(),cpin.strip(),csq.strip(),reg.strip())
+            except Exception as e:
+                last_error=e
+        raise RuntimeError(str(last_error) if last_error else "The modem did not respond to AT commands.")
+
     def _send_modem_sms(self, phone, msg):
         import serial
         port = self._find_modem_port()
@@ -390,7 +413,7 @@ class App:
                     return
                 self.store.set("modem_port",port.get().strip() or "AUTO")
                 self.store.set("modem_baud",baud.get().strip() or "115200")
-                self._send_modem_sms("__TEST_ONLY__", "")
+                report=self._test_modem()\n                messagebox.showinfo(APP,"USB modem communication test completed.\\n\\n"+report)\n                return
                 messagebox.showinfo(APP,"USB modem communication test completed.")
             except Exception as e:
                 messagebox.showerror(APP,"USB modem test failed:\n%s"%e)
